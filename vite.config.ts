@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: Object.fromEntries(['/api', '/accounts', '/admin', '/static'].map(path => [path, {
-      target: process.env.BACKEND_URL || 'http://127.0.0.1:8000',
+      target: process.env.BACKEND_URL || 'http://127.0.0.1:8002',
       changeOrigin: false,
     }])),
   },
