@@ -1,18 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import Art from './Art'
+import DemoPanel from './DemoPanel'
+import { api } from './api'
 
 type Product = { id: number; name: string; description: string; category: string; artwork: string; price: string }
-type Session = { user: { id: number; name: string; email: string } | null; csrf_token: string; login_url: string; provider: string; oauth_configured: boolean }
+type Session = { user: { id: number; name: string; email: string } | null; csrf_token: string; login_url: string; provider: string; oauth_configured: boolean; demo_enabled: boolean }
 type Cart = Record<number, number>
 type Order = { id: number; items: { name: string; quantity: number; price: string }[]; total: string; created_at: string }
 const money = (amount: string | number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(Number(amount))
-
-async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`/api/${path}/`, { credentials: 'same-origin', ...options })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.detail || 'We couldn’t complete that request. Please try again.')
-  return data
-}
 
 function loadCart(): Cart {
   try {
@@ -40,17 +35,32 @@ export default function App() {
   const [message, setMessage] = useState('')
   const [orderError, setOrderError] = useState('')
   const dialog = useRef<HTMLDialogElement>(null)
+  const operation = useRef(false)
+
+  async function exclusive(work: () => Promise<void>) {
+    if (operation.current) return
+    operation.current = true; setBusy(true)
+    try { await work() }
+    finally { operation.current = false; setBusy(false) }
+  }
 
   async function initialize() {
     setLoading(true); setError('')
     try {
-      const [catalog, auth] = await Promise.all([api<Product[]>('products'), api<Session>('session')])
-      setProducts(catalog); setSession(auth)
+      const auth = await api<Session>('session')
+      setSession(auth)
+      const catalog = await api<Product[]>('products')
+      setProducts(catalog)
       setCart(current => Object.fromEntries(Object.entries(current).filter(([id]) => catalog.some(p => p.id === Number(id)))))
     } catch { setError('The shop is taking a moment. Please try again.') }
     finally { setLoading(false) }
   }
   useEffect(() => { void initialize() }, [])
+  useEffect(() => {
+    const refresh = () => { void api<Session>('session').then(setSession).catch(() => {}) }
+    window.addEventListener('session-recheck', refresh)
+    return () => window.removeEventListener('session-recheck', refresh)
+  }, [])
   useEffect(() => { try { localStorage.setItem('everyday-cart', JSON.stringify(cart)) } catch { /* Browsing still works without storage. */ } }, [cart])
   useEffect(() => {
     if (panel && !dialog.current?.open) dialog.current?.showModal()
@@ -66,12 +76,21 @@ export default function App() {
   const count = lines.reduce((sum, line) => sum + line.quantity, 0)
   const total = lines.reduce((sum, line) => sum + Number(line.product.price) * line.quantity, 0)
   const filtered = products.filter(p => (category === 'All essentials' || p.category === category) && `${p.name} ${p.description}`.toLowerCase().includes(query.toLowerCase()))
-  const changeQuantity = (id: number, quantity: number) => setCart(current => {
-    const next = { ...current }
-    if (quantity <= 0) delete next[id]
-    else next[id] = Math.min(20, quantity)
-    return next
-  })
+  function changeQuantity(id: number, quantity: number) {
+    void exclusive(async () => {
+      const next = { ...cart }
+      if (quantity <= 0) delete next[id]
+      else next[id] = Math.min(20, quantity)
+      try {
+        if (session?.demo_enabled) await api('demo/cart', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': session.csrf_token },
+          body: JSON.stringify({ items: Object.entries(next).map(([product_id, amount]) => ({ product_id: Number(product_id), quantity: amount })) }),
+        })
+        setCart(next)
+        if (quantity > 0) setMessage('Your bag has been updated.')
+      } catch (reason) { setMessage((reason as Error).message) }
+    })
+  }
 
   function signIn() {
     if (!session?.oauth_configured) { setMessage('Sign-in is currently unavailable. Please try again later.'); return }
@@ -86,32 +105,33 @@ export default function App() {
 
   async function showOrders() {
     if (!session?.user) { signIn(); return }
-    setPanel('orders'); setBusy(true); setOrderError('')
-    try { setOrders(await api<Order[]>('orders')) }
-    catch (e) { setOrderError((e as Error).message) }
-    finally { setBusy(false) }
+    await exclusive(async () => {
+      setPanel('orders'); setOrderError('')
+      try { setOrders(await api<Order[]>('orders')) }
+      catch (e) { setOrderError((e as Error).message) }
+    })
   }
 
   async function checkout() {
     if (!session?.user) { signIn(); return }
-    setBusy(true)
-    try {
-      const order = await api<Order>('orders', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': session.csrf_token },
-        body: JSON.stringify({ items: lines.map(({ product, quantity }) => ({ product_id: product.id, quantity })) }),
-      })
-      setCart({}); setPanel(null); setMessage(`Order #${order.id} placed. A little everyday joy is on its way!`)
-    } catch (e) { setMessage((e as Error).message) }
-    finally { setBusy(false) }
+    await exclusive(async () => {
+      try {
+        const order = await api<Order>('orders', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': session.csrf_token },
+          body: JSON.stringify({ items: lines.map(({ product, quantity }) => ({ product_id: product.id, quantity })) }),
+        })
+        setCart({}); setPanel(null); setMessage(`Order #${order.id} placed. A little everyday joy is on its way!`)
+      } catch (e) { setMessage((e as Error).message) }
+    })
   }
 
   async function signOut() {
-    setBusy(true)
-    try {
-      await api('logout', { method: 'POST', headers: { 'X-CSRFToken': session!.csrf_token } })
-      setSession(await api<Session>('session')); setOrders([]); setMessage('You’re signed out.')
-    } catch (e) { setMessage((e as Error).message) }
-    finally { setBusy(false) }
+    await exclusive(async () => {
+      try {
+        await api('logout', { method: 'POST', headers: { 'X-CSRFToken': session!.csrf_token } })
+        setSession(await api<Session>('session')); setOrders([]); setMessage('You’re signed out.')
+      } catch (e) { setMessage((e as Error).message) }
+    })
   }
 
   return <>
@@ -141,10 +161,11 @@ export default function App() {
           <label className="search"><Icon kind="search" /><input aria-label="Search products" placeholder="Find something good…" value={query} onChange={event => setQuery(event.target.value)} /></label>
         </div>
         {loading ? <p className="empty">Gathering the good things…</p> : error ? <div className="empty" role="alert"><p>{error}</p><button className="sign-in" onClick={() => void initialize()}>Try again</button></div> : filtered.length === 0 ? <p className="empty">No finds just yet. Try another search.</p> : <div className="product-grid">{filtered.map(product => <article className="product" key={product.id}>
-          <div className={`product-art art-${product.artwork}`}><span className="product-category">{product.category}</span><Art kind={product.artwork} /><button className="add-button" onClick={() => { changeQuantity(product.id, (cart[product.id] || 0) + 1); setMessage(`${product.name} added to your bag.`) }} disabled={cart[product.id] >= 20} aria-label={`Add ${product.name} to cart`}>+</button></div>
+          <div className={`product-art art-${product.artwork}`}><span className="product-category">{product.category}</span><Art kind={product.artwork} /><button className="add-button" onClick={() => changeQuantity(product.id, (cart[product.id] || 0) + 1)} disabled={busy || cart[product.id] >= 20} aria-label={`Add ${product.name} to cart`}>+</button></div>
           <div className="product-title"><h3>{product.name}</h3><span>{money(product.price)}</span></div><p>{product.description}</p>
         </article>)}</div>}
       </section>
+      {session?.demo_enabled && <DemoPanel authenticated={!!session.user} csrfToken={session.csrf_token} busy={busy} exclusive={exclusive} signIn={signIn} />}
       <section className="approach" id="approach"><span className="approach-symbol" aria-hidden="true">✳</span><div><span className="eyebrow">OUR LITTLE PHILOSOPHY</span><h2>Everyday doesn’t have to be ordinary.</h2><p>Useful by nature. Beautiful by design. Just the things you’ll reach for, again and again.</p></div><span className="approach-end" aria-hidden="true">↗</span></section>
     </main>
     <footer><a className="brand" href="/">everyday.</a><span>Small things. Better days.</span><span>Demo store · no real payments</span></footer>

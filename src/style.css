@@ -99,3 +99,25 @@ dialog[open] { display: flex; flex-direction: column; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; }* { transition: none !important; } }
 @media (max-width: 700px) { .orders-link { display: inline-flex; }.orders-link span { display: none; }.orders-link svg { display: block; } }
 @media (max-width: 400px) { header { padding: 0 16px; }.brand { font-size: 21px; }.brand-mark { font-size: 24px; }.header-actions { gap: 10px; } }
+
+.credential-demo { margin-top: 52px; padding: 28px; background: #e8ebdf; border: 1px solid #ced4c3; border-radius: 8px; }
+.demo-heading, .demo-group-heading, .demo-service-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.demo-heading p, .credential-demo > p { font-size: 13px; line-height: 1.6; color: #4e5e49; }
+.demo-heading > button { flex-shrink: 0; }
+.demo-groups, .demo-exposure-apis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 24px; }
+.demo-group { min-width: 0; }
+.demo-group-heading { margin-bottom: 12px; }.demo-group-heading h3 { font-size: 17px; }
+.demo-group-heading button { font-size: 11px; }
+.demo-service, .demo-exposure-service { padding: 18px; margin-top: 12px; background: #f9f8f3; border-radius: 6px; border: 1px solid #d2d8c9; min-width: 0; }
+.demo-service h4, .demo-exposure-service h4 { font-size: 13px; margin: 0; }.demo-service button { border: 1px solid #aab69e; padding: 6px 12px; background: transparent; border-radius: 4px; font-size: 12px; }
+.demo-service dl, .demo-exposure-service dl { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 12px; margin: 16px 0 0; font-size: 11px; line-height: 1.6; }
+.demo-service dt, .demo-exposure-service dt { color: #58634e; }.demo-service dd, .demo-exposure-service dd { margin: 0; overflow-wrap: anywhere; }
+.demo-fingerprint, .demo-exposure-fingerprint { font-family: ui-monospace, monospace; }.demo-outcome.success, .demo-exposure-outcome.success { color: #2b602e; }.demo-outcome.failure, .demo-exposure-outcome.failure, .demo-error { color: #8c3022; }
+.demo-exposure { border-top: 1px solid #c5cdbb; padding-top: 22px; margin-top: 26px; }
+.demo-exposure > p { font-size: 13px; line-height: 1.6; color: #4e5e49; }
+.demo-exposure-service > button { margin-top: 14px; font-size: 11px; white-space: normal; text-align: left; }
+.demo-error { padding: 14px; background: #f9e7df; font-size: 13px; }.demo-error button { margin-left: 12px; }
+.demo-run-summary { background: #f9f8f3; padding: 12px; border-radius: 4px; }.demo-run-summary span { display: block; overflow-wrap: anywhere; font-size: 11px; }
+.demo-log-note { overflow-wrap: anywhere; }
+@media (max-width: 700px) { .credential-demo { padding: 18px; }.demo-heading { align-items: flex-start; flex-direction: column; }.demo-groups, .demo-exposure-apis { grid-template-columns: minmax(0, 1fr); }.demo-service, .demo-exposure-service { padding: 14px; }.demo-service dl, .demo-exposure-service dl { grid-template-columns: 95px minmax(0, 1fr); gap: 7px; } }
+@media (max-width: 400px) { .header-actions .avatar { display: none; } }
